@@ -1,2 +1,4 @@
 .vector_cache
 .data
+*.pt
+*.pk
