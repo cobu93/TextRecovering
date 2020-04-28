@@ -38,18 +38,6 @@ class TextModel(nn.Module):
         self.embedding_size = embedding_size
         self.embedding = nn.Embedding(vocab_size, embedding_size)
         self.pos_encoder = PositionalEncoding(embedding_size, dropout)
-        '''
-        self.encoder = nn.TransformerEncoder(
-                        nn.TransformerEncoderLayer(embedding_size, num_heads, dim_feedforward, dropout), 
-                        encoder_layers
-                    )
-
-        self.decoder = nn.TransformerDecoder(
-                    nn.TransformerDecoderLayer(embedding_size, num_heads, dim_feedforward, dropout), 
-                    decoder_layers
-                    )
-        '''
-        
         self.transformer = nn.Transformer(
             d_model=embedding_size, 
             nhead=num_heads, 

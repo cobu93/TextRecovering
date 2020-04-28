@@ -149,7 +149,8 @@ class BookDataset(torch.utils.data.Dataset):
     ):
         # Defines dataset
         self.data = []
-        
+        self.vocabulary = vocabulary
+
         # For all sentences
         for sentence in data:
             # Add start character
@@ -161,6 +162,25 @@ class BookDataset(torch.utils.data.Dataset):
             self.data.append(example)
             
         self.data = torch.LongTensor(self.data)
+
+
+    def change_vocab(self, vocab, start_char=Vocabulary.START_STR, end_char=Vocabulary.END_STR):
+        # For all sentences
+        new_data = []
+        for sentence in self.data:
+            # Add start character
+            
+            example = vocab.to_indices(
+                    self.vocabulary.to_words(sentence.cpu().numpy())
+                )
+            
+            
+            new_data.append(example)
+
+        self.vocabulary = vocab
+        self.data = torch.LongTensor(new_data)
+
+
 
     def __len__(self):
         return len(self.data)
@@ -191,7 +211,7 @@ def save_text_state(filename, vocab, train_dataset, test_dataset):
         pickle.dump({
             TRAIN_DATASET_STATE: train_dataset,
             TEST_DATASET_STATE: test_dataset,
-            VOCAB_STATE: vocab
+                VOCAB_STATE: vocab
         }, f)
 
 def load_text_state(filename):
@@ -204,16 +224,34 @@ def load_text_state(filename):
 
     return vocab, train_dataset, test_dataset
 
-def build_text_state(books, sentence_length, validation_partition, vocab_name='vocab'):
+
+def build_vocab(dataset, vocab_name):
+    vocab = Vocabulary(vocab_name)
+
+    for sentence in dataset:
+        for word in sentence:
+            vocab.add_word(word)
+    
+    return vocab
+
+def build_dataset(books, min_sentence_length, max_sentence_length):
     dataset = []
     for book in books:
         for sentence in book.content:
-            balanced_sentence = [word.lower().strip() for word in sentence[:sentence_length]]
-            balanced_sentence.extend([Vocabulary.PAD_STR] * (sentence_length - len(sentence)))
-            dataset.append(balanced_sentence)
+            balanced_sentence = [word.lower().strip() for word in sentence[:max_sentence_length]]
+            if len(balanced_sentence) >= min_sentence_length:
+                balanced_sentence.extend([Vocabulary.PAD_STR] * (max_sentence_length - len(sentence)))
+                dataset.append(balanced_sentence)
+
+    return dataset
 
 
-    random.shuffle(dataset)
+
+def build_text_state(books, min_sentence_length, max_sentence_length, validation_partition, vocab_name='vocab', shuffle=True):
+    dataset = build_dataset(books, min_sentence_length, max_sentence_length)
+
+    if shuffle:
+        random.shuffle(dataset)
 
     # Partition dataset
     partition_idx = math.floor(len(dataset) * (1 - validation_partition))
@@ -221,12 +259,7 @@ def build_text_state(books, sentence_length, validation_partition, vocab_name='v
     test_dataset = dataset[partition_idx:]
 
     # Creates vocabulary and trim sentences
-    vocab = Vocabulary(vocab_name)
-
-    for sentence in train_dataset:
-        for word in sentence:
-            vocab.add_word(word)
-
+    vocab = build_vocab(train_dataset, vocab_name)
 
     train_dataset = BookDataset(train_dataset, vocab)
     test_dataset = BookDataset(test_dataset, vocab)
