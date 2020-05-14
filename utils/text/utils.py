@@ -3,6 +3,7 @@ import pickle
 import math
 import random
 import re
+import spacy
 
 ################################################################
 ###     Classes definitions                                  ###
@@ -66,32 +67,23 @@ class Vocabulary:
     PAD_STR = '<pad>'
     START_STR = '<sos>'
     END_STR = '<eos>'
-
-    UNKNOWN_TOKEN = 0
-    PAD_TOKEN = 1   # Used for padding short sentences
-    START_TOKEN = 2   # Start-of-sentence token
-    END_TOKEN = 3   # End-of-sentence token
+    ENTITY_STR = '<ent>'
 
     def __init__(self, name):
         self.name = name
-        self.word2index = {
-                            self.UNKNOWN_STR: self.UNKNOWN_TOKEN, 
-                            self.PAD_STR: self.PAD_TOKEN, 
-                            self.START_STR: self.START_TOKEN, 
-                            self.END_STR: self.END_TOKEN
-                        }
-        self.index2word = {
-                            self.UNKNOWN_TOKEN: self.UNKNOWN_STR, 
-                            self.PAD_TOKEN: self.PAD_STR, 
-                            self.START_TOKEN: self.START_STR, 
-                            self.END_TOKEN: self.END_STR
-                        }
-        self.word2count = {
-                            self.UNKNOWN_STR: 0,
-                            self.PAD_STR: 0,
-                            self.START_STR: 0,
-                            self.END_STR: 0
-                        }   
+
+        self.pre_words = [
+            Vocabulary.UNKNOWN_STR,
+            Vocabulary.PAD_STR,
+            Vocabulary.START_STR,
+            Vocabulary.END_STR,
+            Vocabulary.ENTITY_STR
+        ]
+
+        self.word2index = { word: idx for idx, word in enumerate(self.pre_words) }   
+        self.index2word = { idx: word for idx, word in enumerate(self.pre_words) }   
+        self.word2count = { word: 0 for word in self.pre_words }   
+
         self.num_words = len(self.index2word)
 
     def __len__(self):
@@ -277,7 +269,7 @@ def build_text_state(books, min_sentence_length, max_sentence_length, validation
 # Removes chapters titles
 DELETE_CHAPTER_REGEX = r'^\s*(chapter|chap|\d|[MDCLXVI]+)+'
 # Remove unwanted characers
-DELETE_CHARACTER_REGEX = r'[-|_|\+|"|\(|\)]+'
+DELETE_CHARACTER_REGEX = r'[-|_|\+|"|\(|\)|*|\[|\]|—]+'
 
 # delete chapters (titles)
 def delete_chapters(content, regex=DELETE_CHAPTER_REGEX):
@@ -312,16 +304,28 @@ ABREVS_REGEX = r'(Mr|Mrs|Ms|Dr|Prof|Jr|Hon|Rev|St|[A-Z])\.'
 # Sentence splitting
 SPLIT_SENTENCE_REGEX = r'[\.|;]+'
 # Splitting as words
-WORDS_EXTRACTION_REGEX = r'([\W|\'|:|\?|!|])'
+WORDS_EXTRACTION_REGEX = r'([\W|:|\?|!|\'])'
 # Replace valid separators(non idea separator) with this char
 TEMPORAL_CHAR = '#'
 
-def split_sentences(text, 
+def split_sentences(otext, 
     abrevs_regex=ABREVS_REGEX,
     split_regex=SPLIT_SENTENCE_REGEX, 
     words_extraction_regex=WORDS_EXTRACTION_REGEX, 
     temp_char=TEMPORAL_CHAR
     ):
+
+    ENT_REPLACEMENT = 'EENNTTIITTYY'
+
+    text = otext
+    nlp = spacy.load('en_core_web_sm')
+    doc = nlp(otext)
+    offset = 0
+
+    for ent in doc.ents:
+        if ent.label_ == 'PERSON':
+            text = text[:ent.start_char + offset] + ENT_REPLACEMENT + text[ent.end_char + offset:]
+            offset += len(ENT_REPLACEMENT) - (ent.end_char - ent.start_char) 
 
     abrevs_temp_str = ''.join([temp_char * 5])
     
@@ -345,6 +349,8 @@ def split_sentences(text,
         # Split in words
         splitted_sentence = re.split(words_extraction_regex, sentence)
         splitted_sentence = [sp for sp in splitted_sentence if sp.strip() ]
+        splitted_sentence = [sp if sp != ENT_REPLACEMENT else Vocabulary.ENTITY_STR for sp in splitted_sentence ]
+        
         if len(splitted_sentence) > 0:
             sentences_words.append(splitted_sentence)
     

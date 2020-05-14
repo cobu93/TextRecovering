@@ -47,9 +47,13 @@ class MultiTextClassifierModel(nn.Module):
                         encoder_layers
                     )
 
+        self.dropout_0 = nn.Dropout(dropout)
+        self.linear_0 = nn.Linear(embedding_size, 256)
+        
         self.dropout_1 = nn.Dropout(dropout)
-        self.linear_1 = nn.Linear(embedding_size * sequences_len, len(authors))
+        self.linear_1 = nn.Linear(256 * (sequences_len + 1), len(authors))
         self.bn_1 = nn.BatchNorm1d(len(authors))
+
         self.activation_1 = nn.ReLU()
 
         self.init_weights()
@@ -62,9 +66,12 @@ class MultiTextClassifierModel(nn.Module):
 
     def forward(self, source):      
         out = self.embedding(source) 
-        out = self.pos_encoder(out) 
+        out = self.pos_encoder(out.transpose(0, 1)) 
         out = self.encoder(out)
  
+        out = self.dropout_0(out.transpose(0, 1))   
+        out = self.linear_0(out)      
+
         out = self.dropout_1(out)   
         out = self.linear_1(out.view(out.size()[0], out.size()[1] * out.size()[2]))        
         out = self.bn_1(out)        
@@ -128,11 +135,11 @@ class MultiTextModel(nn.Module):
             srcs[idx] = self.embedding(source[idx]) 
             tgts[idx] = self.embedding(target[idx]) 
         
-            srcs[idx] = self.pos_encoder(srcs[idx])
-            tgts[idx] = self.pos_encoder(tgts[idx])
-        
+            srcs[idx] = self.pos_encoder(srcs[idx].transpose(0, 1))
+            tgts[idx] = self.pos_encoder(tgts[idx].transpose(0, 1))
+
             outputs[idx] = self.decoders[idx](tgts[idx], self.encoder(srcs[idx]))
-            outputs[idx]  = self.linears[idx](outputs[idx])
+            outputs[idx]  = self.linears[idx](outputs[idx].transpose(0, 1))
         
         return outputs
 
